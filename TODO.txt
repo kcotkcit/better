@@ -1,14 +1,14 @@
 ### TODO
-- source flag setting
+- Something wrong with the -mm flag (doesn't create original torrent)
 - README at root
-- Better error handling / output format
-- Add transcode logs to transcode folders
-- Process log
 - Prefix functionality
-- format the default strings with the Defaults
+
+- Better error handling / output format
+- Add transcode logs to transcode folders?
 ### IN PROGRESS
-- tests + tox.ini
 ### DONE
+- source flag setting
 - folder structure and setup.py
 - requirements.txt
 - Python 2.7 compatible
+- tests + tox.ini
