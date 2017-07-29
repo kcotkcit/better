@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # coding: utf-8
 from __future__ import absolute_import
 from __future__ import division
@@ -13,34 +12,20 @@ import subprocess
 import sys
 import time
 from redbetter.compat import quote
-from redbetter.compat import to_unicode as to_str
+from redbetter.compat import mutagen
+from redbetter.compat import to_unicode
+from redbetter.compat import print_bytes as printb
 from redbetter.compat import which
-
-# noinspection PyBroadException
-try:
-    import mutagen
-except:
-    mutagen = None
-
-
-FILE_NOT_FOUND = 1 << 0
-ARG_NOT_DIRECTORY = 1 << 1
-NO_TORRENT_CLIENT = 1 << 2
-TRANSCODE_AGAINST_RULES = 1 << 3
-TRANSCODE_DIR_EXISTS = 1 << 4
-UNKNOWN_TRANSCODE = 1 << 5
-NO_ANNOUNCE_URL = 1 << 6
-NO_TRANSCODER = 1 << 7
-TORRENT_ERROR = 1 << 8
-TRANSCODE_ERROR = 1 << 9
-
-# I prefix torrents I download as FL for Freeleech, UL for Upload, etc. Any
-# prefix in this set will be removed from any transcoded albums and from the
-# resulting torrent files created.
-ignored_prefixes = {
-}
-
-
+from redbetter.errors import ARG_NOT_DIRECTORY
+from redbetter.errors import FILE_NOT_FOUND
+from redbetter.errors import NO_ANNOUNCE_URL
+from redbetter.errors import NO_TORRENT_CLIENT
+from redbetter.errors import NO_TRANSCODER
+from redbetter.errors import TORRENT_ERROR
+from redbetter.errors import TRANSCODE_AGAINST_RULES
+from redbetter.errors import TRANSCODE_DIR_EXISTS
+from redbetter.errors import TRANSCODE_ERROR
+from redbetter.errors import UNKNOWN_TRANSCODE
 
 class Job(object):
     class Defaults(object):
@@ -57,13 +42,19 @@ class Job(object):
         # Whether or not to make .torrent files by default. 0 for none, 1 for
         # transcodes, 2 for transcodes and the original.
         make_torrent = 1
-        # The maximum number of threads to maintain. Any number less than 1 means the
-        # script will use the number of CPU cores in the system. This is the default
-        # value for the -c (--cores) option.
+        # The maximum number of threads to maintain. Any number less than 1
+        # means the script will use the number of CPU cores in the system. This
+        # is the default value for the -c (--cores) option.
         max_threads = 0
+        # I prefix torrents I download as FL for Freeleech, UL for Upload, etc.
+        # Any prefix in this set will be removed from any transcoded albums and
+        # from the resulting torrent files created.
+        ignored_prefixes = set([
+            'FL',
+            #'UL',
+        ])
 
-
-    def __init__(self, announce, torrent_output, transcode_output, max_threads, explicit_transcode, formats, do_transcode, do_torrent, explicit_torrent, original_torrent, albums=None):
+    def __init__(self, announce, torrent_output, transcode_output, max_threads, explicit_transcode, formats, do_transcode, do_torrent, explicit_torrent, original_torrent, albums=None, ignored_prefixes=None):
         self.announce = announce
         self.torrent_output = torrent_output
         self.transcode_output = transcode_output
@@ -79,27 +70,30 @@ class Job(object):
         if albums == None:
             albums = []
         self.albums = albums
+        if ignored_prefixes is None:
+            ignored_prefixes = Job.Defaults.ignored_prefixes
+        self.ignored_prefixes = ignored_prefixes
 
     def start(self):
         global job
         job = self
         # Check directories
         if not os.path.isdir(self.torrent_output):
-            print('The given torrent output dir ({}) is not a directory'.format(self.torrent_output))
+            printb('The given torrent output dir ({}) is not a directory'.format(self.torrent_output))
             self.exit_code |= ARG_NOT_DIRECTORY
         elif not os.path.isdir(self.transcode_output):
-            print('The given transcode output dir ({}) is not a directory'.format(self.transcode_output))
+            printb('The given transcode output dir ({}) is not a directory'.format(self.transcode_output))
             self.exit_code |= ARG_NOT_DIRECTORY
         self.exit_if_error()
 
         first_print = True
         for album in self.albums:
             if not first_print:
-                print('\n\n')
+                printb('\n\n')
             first_print = False
 
-            album = to_str(album)
-            print('Processing', album)
+            album = to_unicode(album)
+            printb('Processing', album)
 
             process_album(album, job.do_transcode, job.explicit_transcode, job.formats, job.do_torrent, job.explicit_torrent, job.original_torrent)
         self.exit()
@@ -110,7 +104,7 @@ class Job(object):
 
     def exit(self):
         if (self.exit_code != 0):
-            print('An error occurred, exiting with code {0}'.format(self.exit_code))
+            printb('An error occurred, exiting with code {0}'.format(self.exit_code))
         sys.exit(self.exit_code)
 
 job = None
@@ -189,7 +183,7 @@ def enumerate_contents(directory):
             directories.append(root)
 
         for file in files:
-            file = to_str(file)
+            file = to_unicode(file)
             extension = file[file.rfind('.') + 1:]
             if len(root) > 0:
                 file = root + '/' + file
@@ -213,11 +207,11 @@ def process_album(directory, do_transcode, explicit_transcode, transcode_formats
         return
 
     if original_torrent:
-        print("making the original torrent")
+        printb("making the original torrent")
         _, filename = os.path.split(directory)
         filename = filename + '.torrent'
-        print('filename:', filename)
-        print('directory:', directory)
+        printb('filename:', filename)
+        printb('directory:', directory)
         make_torrent(directory, filename, job.announce)
 
     if do_transcode:
@@ -242,11 +236,11 @@ def transcode_album(source, directories, files, lossless_files, formats, explici
     for transcode_format in formats:
         if not command_exists(transcode_commands[transcode_format]):
             command = shlex.split(transcode_commands[transcode_format])[0]
-            print('Cannot transcode to ' + transcode_format + ', "' + command + '" not found')
+            printb('Cannot transcode to ' + transcode_format + ', "' + command + '" not found')
             job.exit_code |= NO_TRANSCODER
             continue
 
-        print('\nTranscoding to ' + transcode_format)
+        printb('\nTranscoding to ' + transcode_format)
 
         if dir_has_codec:
             transcoded = re.sub(codec_regex, '[{}]'.format(transcode_format.upper()), source, flags=re.IGNORECASE)
@@ -255,15 +249,12 @@ def transcode_album(source, directories, files, lossless_files, formats, explici
 
         transcoded = transcoded[transcoded.rfind('/') + 1:]
 
-        for prefix in ignored_prefixes:
-            if transcoded.startswith(prefix):
-                transcoded = transcoded[len(prefix):]
-                break
+        transcoded = remove_prefixes(job.ignored_prefixes, transcoded)
 
         transcoded = job.transcode_output + '/' + transcoded
 
         if os.path.exists(transcoded):
-            print('Directory already exists: ' + transcoded)
+            printb('Directory already exists: ' + transcoded)
             if not explicit_transcode:
                 job.exit_code |= TRANSCODE_DIR_EXISTS
                 continue
@@ -296,9 +287,9 @@ def transcode_files(src, dst, files, command, extension):
             if threads[i] is None or threads[i].poll() is not None:
                 if threads[i] is not None:
                     if threads[i].poll() != 0:
-                        print('Error transcoding, process exited with code {}'.format(threads[i].poll()))
-                        print('stderr output...')
-                        print(to_str(threads[i].communicate()[1]))
+                        printb('Error transcoding, process exited with code {}'.format(threads[i].poll()))
+                        printb('stderr output...')
+                        printb(to_unicode(threads[i].communicate()[1]))
                     # noinspection PyBroadException
                     try:
                         threads[i].kill()
@@ -317,7 +308,7 @@ def transcode_files(src, dst, files, command, extension):
                         universal_newlines=True
                     )
                     filenames.append((src + '/' + file, transcoded[-1]))
-                    print(to_str('Transcoding {} ({} remaining)'.format(file, len(remaining))))
+                    printb('Transcoding {} ({} remaining)'.format(to_unicode(file), len(remaining)))
             else:
                 transcoding = True
 
@@ -325,10 +316,10 @@ def transcode_files(src, dst, files, command, extension):
 
     for file in transcoded:
         if not os.path.isfile(file):
-            print('An error occurred and {} was not created'.format(file))
+            printb('An error occurred and {} was not created'.format(file))
             job.exit_code |= TRANSCODE_ERROR
         elif os.path.getsize(file) == 0:
-            print('An error occurred and {} is empty'.format(file))
+            printb('An error occurred and {} is empty'.format(file))
             job.exit_code |= TRANSCODE_ERROR
 
     try:
@@ -343,21 +334,21 @@ def check_main_args(directory, transcode_formats, explicit_torrent):
     code = 0
 
     if not os.path.exists(directory):
-        print('The directory "{}" doesn\'t exist'.format(directory))
+        printb('The directory "{}" doesn\'t exist'.format(directory))
         code |= FILE_NOT_FOUND
     elif os.path.isfile(directory):
-        print('The file "{}" is not a directory'.format(directory))
+        printb('The file "{}" is not a directory'.format(directory))
         code |= ARG_NOT_DIRECTORY
 
     for i in range(len(transcode_formats)):
         transcode_formats[i] = transcode_formats[i].lower()
 
         if transcode_formats[i] not in transcode_commands.keys():
-            print('No way of transcoding to ' + transcode_formats[i])
+            printb('No way of transcoding to ' + transcode_formats[i])
             code |= UNKNOWN_TRANSCODE
 
     if explicit_torrent and (job.announce is None or len(job.announce) == 0):
-        print('You cannot create torrents without first setting your announce URL')
+        printb('You cannot create torrents without first setting your announce URL')
         code |= NO_ANNOUNCE_URL
 
     job.exit_code |= code
@@ -372,16 +363,16 @@ def is_transcode_allowed(has_lossy, lossless_files, explicit_transcode):
 
     if has_lossy > 0:
         if len(lossless_files) == 0:
-            print('Cannot transcode lossy formats, exiting')
+            printb('Cannot transcode lossy formats, exiting')
             job.exit_code |= TRANSCODE_AGAINST_RULES
             return False
         elif not explicit_transcode:
-            print('Found mixed lossy and lossless, you must explicitly enable transcoding')
+            printb('Found mixed lossy and lossless, you must explicitly enable transcoding')
             job.exit_code |= TRANSCODE_AGAINST_RULES
             return False
 
     if len(lossless_files) == 0:
-        print('Nothing to transcode!')
+        printb('Nothing to transcode!')
         job.exit_code |= TRANSCODE_AGAINST_RULES
         return False
 
@@ -405,7 +396,7 @@ def copy_album_art(source, dest):
 
 def get_tags(filename):
     command = 'ffprobe -v 0 -print_format json -show_format'.split(' ') + [filename]
-    info = json.loads(to_str(subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0]))
+    info = json.loads(to_unicode(subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0]))
 
     if 'format' not in info or 'tags' not in info['format']:
         return '', '', '', '', ''
@@ -426,19 +417,19 @@ def get_tags(filename):
 
 def make_torrent(directory, output, announce_url):
     global job
-    print('Making torrent for ' + directory)
+    printb('Making torrent for ' + directory)
 
     if job.torrent_command is None:
         job.torrent_command = find_torrent_command(torrent_commands)
         if job.torrent_command is None:
-            print('No torrent client found, can\'t create a torrent')
+            printb('No torrent client found, can\'t create a torrent')
             job.exit_code |= NO_TORRENT_CLIENT
             return
 
     command = format_command(job.torrent_command, directory, os.path.join(job.torrent_output, output), announce_url)
     torrent_status = subprocess.call(command, shell=True)
     if torrent_status != 0:
-        print('Making torrent file exited with status {}!'.format(torrent_status))
+        printb('Making torrent file exited with status {}!'.format(torrent_status))
         job.exit_code |= TORRENT_ERROR
 
 
@@ -469,3 +460,10 @@ def copy_contents(src, dst, dirs, files):
 
     for file in files:
         shutil.copy(src + '/' + file, dst + '/' + file)
+
+
+def remove_prefixes(prefixes, name):
+    for prefix in prefixes:
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name

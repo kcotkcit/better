@@ -4,11 +4,19 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import os
-import sys
-import six
 import pipes
+import six
+import sys
 
 
+# Mutagen
+try:
+    import mutagen
+except:
+    mutagen = None
+
+
+# quote
 if six.PY2:
     from pipes import quote
 elif six.PY3:
@@ -18,14 +26,25 @@ elif six.PY3:
         from pipes import quote
 
 
+# Unicode handling is really obnoxious in Python 2.x. These helper functions
+# make it clear which type of string/bytes object you have, and allow handling
+# files and directories with unicode characters.
 def to_unicode(data):
     if isinstance(data, six.text_type):
-        return to_unicode(data.encode('utf-8', 'surrogateescape'))
-
+        return data
     if isinstance(data, six.binary_type):
         return data.decode('utf-8', 'ignore')
-
     raise ValueError('unrecognized type: {0}'.format(type(data)))
+
+def to_bytes(data):
+    if isinstance(data, six.binary_type):
+        return data
+    if isinstance(data, six.text_type):
+        return data.encode('utf-8', 'surrogateescape')
+    raise ValueError('unrecognized type: {0}'.format(type(data)))
+
+def print_bytes(*args):
+    print(*(to_bytes(a) for a in args))
 
 
 # This version of "which" comes directly from the sources for Python 3.6. It's
