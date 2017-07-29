@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-from transcode import Job
+from redbetter.transcode import Job
 import argparse
 import multiprocessing
 import os
@@ -71,7 +71,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main(args):
+def run(args):
     do_transcode = Job.Defaults.do_transcode and not args.no_transcode
     explicit_transcode = args.transcode
     formats = args.formats.split(',')
@@ -116,4 +116,6 @@ def main(args):
             albums=args.album)
     job.start()
 
-main(parse_args())
+
+def main():
+    run(parse_args())

@@ -12,9 +12,9 @@ import shutil
 import subprocess
 import sys
 import time
-from compat import quote
-from compat import to_unicode as to_str
-from compat import which
+from redbetter.compat import quote
+from redbetter.compat import to_unicode as to_str
+from redbetter.compat import which
 
 # noinspection PyBroadException
 try:
