@@ -41,7 +41,7 @@ class Defaults(object):
     # Where to save transcoded albums
     transcode_output = '.'
     # The default formats to transcode to
-    default_formats = '320,v0'
+    formats = '320,v0'
     # Whether or not to transcode by default
     do_transcode = True
     # Whether or not to make .torrent files by default. 0 for none, 1 for
@@ -63,19 +63,22 @@ class Defaults(object):
 class Job(object):
     def __init__(
             self,
-            announce,
-            torrent_output,
-            transcode_output,
-            max_threads,
-            do_transcode,
-            explicit_transcode,
-            formats,
-            do_torrent,
-            explicit_torrent,
-            original_torrent,
             albums,
-            prefix,
-            snip_prefixes):
+            announce=Defaults.announce,
+            torrent_output=Defaults.torrent_output,
+            transcode_output=Defaults.transcode_output,
+            max_threads=Defaults.max_threads,
+            do_transcode=Defaults.do_transcode,
+            formats=Defaults.formats,
+            do_torrent=Defaults.make_torrent,
+            prefix=Defaults.prefix,
+            snip_prefixes=Defaults.snip_prefixes,
+            # Currently calculated and passed by better.py. This interface
+            # should be updated to take the same main arguments and calculate
+            # these itself.
+            explicit_transcode=False,
+            explicit_torrent=False,
+            original_torrent=False):
         self.announce = announce
         self.torrent_output = torrent_output
         self.transcode_output = transcode_output

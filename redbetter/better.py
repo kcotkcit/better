@@ -82,7 +82,7 @@ def parse_args():
             '-f',
             '--formats',
             action='store',
-            default=Defaults.default_formats,
+            default=Defaults.formats,
             help='The comma-separated formats to transcode to (can be of '
             '16-48,16-44,alac,320,v0,v1,v2) (default: %(default)s)')
     parser.add_argument(
