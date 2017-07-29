@@ -93,7 +93,7 @@ def parse_args():
             help='A space-separated list of prefixes to add to transcode '
             'directories and all .torrent files (empty by default)')
     parser.add_argument(
-            '-s',
+            '-x',
             '--snip-prefixes',
             dest='snip_prefixes',
             nargs='*',
@@ -101,6 +101,15 @@ def parse_args():
             help='A prefix to remove from the beginning of any transcoded '
             'directories and .torrent files, performed before any specified '
             'prefixes are added')
+    parser.add_argument(
+            '-s',
+            '--source',
+            action='store',
+            dest='source',
+            default=Defaults.source,
+            help='A source to embed in the torrent, such as "red", to avoid '
+            'having to re-download the torrent from the website after '
+            'uploading it. (default: %(default)s)')
     parser.add_argument(
             '-c',
             '--cores',
@@ -146,18 +155,21 @@ def main():
     original_torrent = args.make_torrent == 2
 
     job = Job(
-        announce=args.announce,
-        torrent_output=args.torrent_output,
-        transcode_output=args.transcode_output,
-        max_threads=args.cores,
-        do_transcode=do_transcode,
-        explicit_transcode=explicit_transcode,
-        formats=formats,
-        do_torrent=do_torrent,
-        explicit_torrent=explicit_torrent,
-        original_torrent=original_torrent,
-        albums=args.album,
-        prefix=args.prefix,
-        snip_prefixes=args.snip_prefixes,
+        albums = args.album,
+
+        announce = args.announce,
+        do_torrent = do_torrent,
+        do_transcode = do_transcode,
+        formats = formats,
+        max_threads = args.cores,
+        prefix = args.prefix,
+        snip_prefixes = args.snip_prefixes,
+        source = args.source,
+        torrent_output = args.torrent_output,
+        transcode_output = args.transcode_output,
+
+        explicit_torrent = explicit_torrent,
+        explicit_transcode = explicit_transcode,
+        original_torrent = original_torrent,
     )
     job.start()

@@ -5,6 +5,7 @@
 - Add transcode logs to transcode folders
 - Process log
 - Prefix functionality
+- format the default strings with the Defaults
 ### IN PROGRESS
 - tests + tox.ini
 ### DONE

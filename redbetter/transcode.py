@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 
+from redbetter.bencode import Bencode
 from redbetter.compat import print_bytes as printb
 from redbetter.compat import to_unicode
 from redbetter.compat import mutagen
@@ -18,6 +19,7 @@ from redbetter.errors import FILE_NOT_FOUND
 from redbetter.errors import NO_ANNOUNCE_URL
 from redbetter.errors import NO_TORRENT_CLIENT
 from redbetter.errors import NO_TRANSCODER
+from redbetter.errors import SOURCE_EMBED_ERROR
 from redbetter.errors import TORRENT_ERROR
 from redbetter.errors import TRANSCODE_AGAINST_RULES
 from redbetter.errors import TRANSCODE_DIR_EXISTS
@@ -58,6 +60,8 @@ class Defaults(object):
     # A prefix to add to the front of any transcoded albums and any resulting
     # torrent files created.
     prefix = ''
+    # A source to embed in the generated torrent files.
+    source = 'red'
 
 
 class Job(object):
@@ -65,34 +69,37 @@ class Job(object):
             self,
             albums,
             announce=Defaults.announce,
-            torrent_output=Defaults.torrent_output,
-            transcode_output=Defaults.transcode_output,
-            max_threads=Defaults.max_threads,
+            do_torrent=Defaults.make_torrent,
             do_transcode=Defaults.do_transcode,
             formats=Defaults.formats,
-            do_torrent=Defaults.make_torrent,
+            max_threads=Defaults.max_threads,
             prefix=Defaults.prefix,
             snip_prefixes=Defaults.snip_prefixes,
+            source=Defaults.source,
+            torrent_output=Defaults.torrent_output,
+            transcode_output=Defaults.transcode_output,
             # Currently calculated and passed by better.py. This interface
             # should be updated to take the same main arguments and calculate
             # these itself.
-            explicit_transcode=False,
             explicit_torrent=False,
+            explicit_transcode=False,
             original_torrent=False):
-        self.announce = announce
-        self.torrent_output = torrent_output
-        self.transcode_output = transcode_output
-        self.max_threads = max_threads
-        self.explicit_transcode = explicit_transcode
-        self.formats = formats
-
-        self.do_transcode = do_transcode
-        self.do_torrent = do_torrent
-        self.explicit_torrent = explicit_torrent
-        self.original_torrent = original_torrent
         self.albums = albums
+
+        self.announce = announce
+        self.do_torrent = do_torrent
+        self.do_transcode = do_transcode
+        self.formats = formats
+        self.max_threads = max_threads
         self.prefix = prefix
         self.snip_prefixes = set(snip_prefixes)
+        self.source = source
+        self.torrent_output = torrent_output
+        self.transcode_output = transcode_output
+
+        self.explicit_torrent = explicit_torrent
+        self.explicit_transcode = explicit_transcode
+        self.original_torrent = original_torrent
 
         self.exit_code = 0
         self.torrent_command = None
@@ -268,21 +275,29 @@ class Job(object):
             if self.torrent_command is None:
                 printb('No torrent client found, can\'t create a torrent')
                 self.exit_code |= NO_TORRENT_CLIENT
-                return
+                return None
 
-        command = format_command(self.torrent_command, directory, os.path.join(self.torrent_output, output), announce_url)
+        new_torrent_path = os.path.join(self.torrent_output, output)
+        command = format_command(self.torrent_command, directory, new_torrent_path, announce_url)
         torrent_status = subprocess.call(command, shell=True)
         if torrent_status != 0:
             printb('Making torrent file exited with status {}!'.format(torrent_status))
             self.exit_code |= TORRENT_ERROR
+            return None
+        return new_torrent_path
+
 
     def process_album(self, album_path, do_transcode, explicit_transcode, transcode_formats, do_torrent, explicit_torrent,
                       original_torrent):
 
+        torrent_path = None
         if original_torrent:
             _, directory_name = os.path.split(album_path)
             torrent_filename = '%s.torrent' % (directory_name)
-            self.make_torrent(album_path, torrent_filename, self.announce)
+            torrent_path = self.make_torrent(album_path, torrent_filename, self.announce)
+
+        if torrent_path and self.source:
+            self.embed_source(torrent_path)
 
         if not do_transcode:
             return
@@ -343,10 +358,27 @@ class Job(object):
                                     transcode_commands[transcode_format],
                                     extensions[transcode_format])
 
+            torrent_path = None
             if mktorrent:
                 _, filename = os.path.split(transcoded)
                 filename = filename + '.torrent'
-                self.make_torrent(transcoded, filename, self.announce)
+                torrent_path = self.make_torrent(transcoded, filename, self.announce)
+            if torrent_path and self.source:
+                self.embed_source(torrent_path)
+
+    def embed_source(self, torrent_path):
+        printb('embedding source = "%s" into %s' % (self.source, torrent_path))
+        try:
+            torrent = Bencode(torrent_path)
+            torrent.read()
+            torrent['info']['source'] = self.source
+            torrent.write()
+        except Exception as e:
+            printb('Could not embed source "%s" in %s' % (
+                self.source, torrent_path))
+            print(e)
+            self.exit_code |= SOURCE_EMBED_ERROR
+
 
     def exit_if_error(self):
         if self.exit_code != 0:

@@ -1,6 +1,7 @@
 *.pyc
-.python-version
+*.torrent
 .DS_Store
-__pycache__
+.python-version
 .tox/
 MANIFEST
+__pycache__
