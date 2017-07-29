@@ -1,7 +1,13 @@
 ### TODO
-- Python 2.7 compatible
 - source flag setting
 - README at root
-- requirements.txt
-- folder structure and setup.py
+- Better error handling / output format
+- Add transcode logs to transcode folders
+- Process log
+- Prefix functionality
+### IN PROGRESS
 - tests + tox.ini
+### DONE
+- folder structure and setup.py
+- requirements.txt
+- Python 2.7 compatible
