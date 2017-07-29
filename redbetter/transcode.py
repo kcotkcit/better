@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
+import multiprocessing
 import os
 import re
 import subprocess
@@ -11,6 +12,7 @@ import time
 
 from redbetter.compat import print_bytes as printb
 from redbetter.compat import to_unicode
+from redbetter.compat import mutagen
 from redbetter.errors import ARG_NOT_DIRECTORY
 from redbetter.errors import FILE_NOT_FOUND
 from redbetter.errors import NO_ANNOUNCE_URL
@@ -29,64 +31,143 @@ from redbetter.utils import get_tags
 from redbetter.utils import format_command
 from redbetter.utils import remove_prefixes
 from redbetter.utils import enumerate_contents
+from redbetter.utils import normalize_directory_path
+
+class Defaults(object):
+    # Your unique announce URL
+    announce = ''
+    # Where to output .torrent files
+    torrent_output = '.'
+    # Where to save transcoded albums
+    transcode_output = '.'
+    # The default formats to transcode to
+    default_formats = '320,v0'
+    # Whether or not to transcode by default
+    do_transcode = True
+    # Whether or not to make .torrent files by default. 0 for none, 1 for
+    # transcodes, 2 for transcodes and the original.
+    make_torrent = 1
+    # The maximum number of threads to maintain. Any number less than 1
+    # means the script will use the number of CPU cores in the system. This
+    # is the default value for the -c (--cores) option.
+    max_threads = 0
+    # I prefix torrents I download as FL for Freeleech, UL for Upload, etc.
+    # Any prefix in this set will be removed from any transcoded albums and
+    # from the resulting torrent files created.
+    snip_prefixes = set()
+    # A prefix to add to the front of any transcoded albums and any resulting
+    # torrent files created.
+    prefix = ''
 
 
 class Job(object):
-    class Defaults(object):
-        # Your unique announce URL
-        announce = ''
-        # Where to output .torrent files
-        torrent_output = '.'
-        # Where to save transcoded albums
-        transcode_output = '.'
-        # The default formats to transcode to
-        default_formats = '320,v0'
-        # Whether or not to transcode by default
-        do_transcode = True
-        # Whether or not to make .torrent files by default. 0 for none, 1 for
-        # transcodes, 2 for transcodes and the original.
-        make_torrent = 1
-        # The maximum number of threads to maintain. Any number less than 1
-        # means the script will use the number of CPU cores in the system. This
-        # is the default value for the -c (--cores) option.
-        max_threads = 0
-        # I prefix torrents I download as FL for Freeleech, UL for Upload, etc.
-        # Any prefix in this set will be removed from any transcoded albums and
-        # from the resulting torrent files created.
-        ignored_prefixes = set([
-            'FL',
-            #'UL',
-        ])
-
-    def __init__(self, announce, torrent_output, transcode_output, max_threads, explicit_transcode, formats, do_transcode, do_torrent, explicit_torrent, original_torrent, albums=None, ignored_prefixes=None):
+    def __init__(
+            self,
+            announce,
+            torrent_output,
+            transcode_output,
+            max_threads,
+            do_transcode,
+            explicit_transcode,
+            formats,
+            do_torrent,
+            explicit_torrent,
+            original_torrent,
+            albums,
+            prefix,
+            snip_prefixes):
         self.announce = announce
         self.torrent_output = torrent_output
         self.transcode_output = transcode_output
         self.max_threads = max_threads
         self.explicit_transcode = explicit_transcode
         self.formats = formats
+
         self.do_transcode = do_transcode
         self.do_torrent = do_torrent
         self.explicit_torrent = explicit_torrent
         self.original_torrent = original_torrent
+        self.albums = albums
+        self.prefix = prefix
+        self.snip_prefixes = set(snip_prefixes)
+
         self.exit_code = 0
         self.torrent_command = None
-        if albums == None:
-            albums = []
-        self.albums = albums
-        if ignored_prefixes is None:
-            ignored_prefixes = self.Defaults.ignored_prefixes
-        self.ignored_prefixes = ignored_prefixes
+
+    def validate_arguments(self):
+        # Default to transcoding on one thread per core.
+        if self.max_threads < 1:
+            self.max_threads = multiprocessing.cpu_count()
+            printb('Defaulting to transcoding using %d cores/threads' % (
+                self.max_threads))
+
+        # Check mutagen status.
+        if mutagen is None and ('v0' in formats or 'v2' in formats):
+            printb('Mutagen is not installed; album art cannot be copied to '
+                   'VBR transcodes.')
+            printb('To keep album art, install mutagen using pip or apt-get')
+
+
+        # Torrent output directory
+        self.torrent_output = normalize_directory_path(self.torrent_output)
+        if not os.path.isdir(self.torrent_output):
+            self.exit_code |= FILE_NOT_FOUND
+            printb('There is no torrent output directory: %s' % (
+                self.torrent_output))
+
+        # Transcode output directory
+        self.transcode_output = normalize_directory_path(self.transcode_output)
+        if not os.path.isdir(self.transcode_output):
+            self.exit_code |= FILE_NOT_FOUND
+            printb('There is no transcode output directory : %s' % (
+                self.transcode_output))
+
+        # Album paths
+        bad_albums = []
+        valid_albums = []
+        for album in self.albums:
+            album = normalize_directory_path(to_unicode(album))
+            if not os.path.isdir(album):
+                bad_albums.append(album)
+            else:
+                valid_albums.append(album)
+        if bad_albums:
+            self.exit_code |= FILE_NOT_FOUND
+            printb('The following albums are not directories:')
+            for bad_album in bad_albums:
+                printb('\t%s' % (bad_album))
+        self.albums = valid_albums
+
+        # Transcode formats
+        bad_formats = []
+        valid_formats = []
+        for i, transcode_format in enumerate(self.formats):
+            f = transcode_format.lower()
+            if transcode_format not in transcode_commands:
+                bad_formats.append(transcode_format)
+            else:
+                valid_formats.append(transcode_format)
+        if bad_formats:
+            self.exit_code |= UNKNOWN_TRANSCODE
+            printb('Cannot transcode to the following formats:')
+            for bad_format in bad_formats:
+                printb('\t%s' % (bad_format))
+        self.formats = valid_formats
+
+        if not self.announce:
+            # Cannot create .torrent files without an announce url.
+            if self.explicit_torrent:
+                printb('You cannot create torrents without first setting your announce URL')
+                self.exit_code |= NO_ANNOUNCE_URL
+            else:
+                self.do_torrent = False
+
+
+        self.exit_if_error()
+
 
     def start(self):
-        # Check directories
-        if not os.path.isdir(self.torrent_output):
-            printb('The given torrent output dir ({}) is not a directory'.format(self.torrent_output))
-            self.exit_code |= ARG_NOT_DIRECTORY
-        elif not os.path.isdir(self.transcode_output):
-            printb('The given transcode output dir ({}) is not a directory'.format(self.transcode_output))
-            self.exit_code |= ARG_NOT_DIRECTORY
-        self.exit_if_error()
+        self.validate_arguments()
 
         first_print = True
         for album in self.albums:
@@ -158,31 +239,6 @@ class Job(object):
         except:
             pass
 
-    def check_main_args(self, directory, transcode_formats, explicit_torrent):
-        code = 0
-
-        if not os.path.exists(directory):
-            printb('The directory "{}" doesn\'t exist'.format(directory))
-            code |= FILE_NOT_FOUND
-        elif os.path.isfile(directory):
-            printb('The file "{}" is not a directory'.format(directory))
-            code |= ARG_NOT_DIRECTORY
-
-        for i in range(len(transcode_formats)):
-            transcode_formats[i] = transcode_formats[i].lower()
-
-            if transcode_formats[i] not in transcode_commands.keys():
-                printb('No way of transcoding to ' + transcode_formats[i])
-                code |= UNKNOWN_TRANSCODE
-
-        if explicit_torrent and (self.announce is None or len(self.announce) == 0):
-            printb('You cannot create torrents without first setting your announce URL')
-            code |= NO_ANNOUNCE_URL
-
-        self.exit_code |= code
-
-        return code == 0
-
     def is_transcode_allowed(self, has_lossy, lossless_files, explicit_transcode):
         if has_lossy > 0:
             if len(lossless_files) == 0:
@@ -217,17 +273,13 @@ class Job(object):
             printb('Making torrent file exited with status {}!'.format(torrent_status))
             self.exit_code |= TORRENT_ERROR
 
-    def process_album(self, directory, do_transcode, explicit_transcode, transcode_formats, do_torrent, explicit_torrent,
+    def process_album(self, album_path, do_transcode, explicit_transcode, transcode_formats, do_torrent, explicit_torrent,
                       original_torrent):
-        directory = os.path.abspath(directory)
-
-        if not (self.check_main_args(directory, transcode_formats, explicit_torrent)):
-            return
 
         if original_torrent:
-            _, directory_name = os.path.split(directory)
+            _, directory_name = os.path.split(album_path)
             torrent_filename = '%s.torrent' % (directory_name)
-            self.make_torrent(directory, torrent_filename, self.announce)
+            self.make_torrent(album_path, torrent_filename, self.announce)
 
         if not do_transcode:
             return
@@ -235,12 +287,12 @@ class Job(object):
         (directories,
          data_files,
          has_lossy,
-         lossless_files) = enumerate_contents(directory)
+         lossless_files) = enumerate_contents(album_path)
 
         if not self.is_transcode_allowed(has_lossy, lossless_files, explicit_transcode):
             return
 
-        self.transcode_album(directory,
+        self.transcode_album(album_path,
                         directories,
                         data_files,
                         lossless_files,
@@ -272,7 +324,7 @@ class Job(object):
                 transcoded = '%s [%s]' % (source.rstrip(), transcode_format.upper())
 
             transcoded = transcoded[transcoded.rfind('/') + 1:]
-            transcoded = remove_prefixes(self.ignored_prefixes, transcoded)
+            transcoded = remove_prefixes(self.snip_prefixes, transcoded)
             transcoded = self.transcode_output + '/' + transcoded
 
             if os.path.exists(transcoded):

@@ -124,3 +124,6 @@ def enumerate_contents(directory):
                 data_files.append(file)
 
     return directories, data_files, has_lossy, lossless_files
+
+def normalize_directory_path(path):
+    return os.path.abspath(os.path.expanduser(path)).rstrip('/')
