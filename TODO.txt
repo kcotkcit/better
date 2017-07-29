@@ -1,0 +1,7 @@
+### TODO
+- Python 2.7 compatible
+- source flag setting
+- README at root
+- requirements.txt
+- folder structure and setup.py
+- tests + tox.ini
