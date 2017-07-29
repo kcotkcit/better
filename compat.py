@@ -20,7 +20,7 @@ elif six.PY3:
 
 def to_unicode(data):
     if isinstance(data, six.text_type):
-        return to_str(data.encode('utf-8', 'surrogateescape'))
+        return to_unicode(data.encode('utf-8', 'surrogateescape'))
 
     if isinstance(data, six.binary_type):
         return data.decode('utf-8', 'ignore')
