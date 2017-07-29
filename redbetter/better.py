@@ -1,20 +1,17 @@
-#!/usr/bin/env python
 # coding: utf-8
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-from redbetter.transcode import Job
 import argparse
 import multiprocessing
 import os
 import sys
 
+from redbetter.transcode import Job
+from redbetter.compat import mutagen
+
 # noinspection PyBroadException
-try:
-    import mutagen
-except:
-    mutagen = None
 
 
 
@@ -27,6 +24,14 @@ def parse_args():
                   'by opening %(prog)s with a text editor and changing the variables at the top of the file.' \
         .format(__version__)
 
+    postfixes = {
+        'a': ' (Usable URL set)' if len(Job.Defaults.announce) > 0 else '',
+        't': ' (default)' if Job.Defaults.do_transcode else '',
+        'T': ' (default)' if not Job.Defaults.do_transcode else '',
+        'm': ' (default)' if Job.Defaults.make_torrent else '',
+        'M': ' (default)' if not Job.Defaults.make_torrent else ''
+    }
+
     parser = argparse.ArgumentParser(description=description)
     transcode_group = parser.add_mutually_exclusive_group()
     torrent_group = parser.add_mutually_exclusive_group()
@@ -35,38 +40,38 @@ def parse_args():
 
     parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + __version__)
 
-    announce_postfix = ' (Usable URL set)' if len(Job.Defaults.announce) > 0 else ''
     parser.add_argument('-a', '--announce', action='store', default=Job.Defaults.announce,
-                        help='The torrent announce URL to use' + announce_postfix)
+                        help='The torrent announce URL to use' + postfixes['a'])
 
-    postfixes = {
-        't': ' (default)' if Job.Defaults.do_transcode else '',
-        'T': ' (default)' if not Job.Defaults.do_transcode else '',
-        'm': ' (default)' if Job.Defaults.make_torrent else '',
-        'M': ' (default)' if not Job.Defaults.make_torrent else ''
-    }
-    transcode_group.add_argument('-t', '--transcode', action='store_true',
-                                 help='Transcode the given album into other formats' + postfixes['t'])
-    transcode_group.add_argument('-T', '--no-transcode', action='store_true',
-                                 help='Ensures the given album is NOT transcoded' + postfixes['T'])
+    transcode_group.add_argument(
+            '-t', '--transcode', action='store_true',
+            help='Transcode the given album into other formats' + postfixes['t'])
+    transcode_group.add_argument(
+            '-T', '--no-transcode', action='store_true',
+            help='Ensures the given album is NOT transcoded' + postfixes['T'])
 
-    torrent_group.add_argument('-m', '--make-torrent', action='count', default=Job.Defaults.make_torrent,
-                               help='Creates a torrent of any transcoded albums. Specify more than once to also create '
-                                    'a torrent of the source album (e.g. -mm).' + postfixes['m'])
-    torrent_group.add_argument('-M', '--no-torrent', action='store_true',
-                               help='Ensures no .torrent files are created' + postfixes['M'])
+    torrent_group.add_argument(
+            '-m', '--make-torrent', action='count', default=Job.Defaults.make_torrent,
+            help='Creates a torrent of any transcoded albums. Specify more than once to also create '
+                 'a torrent of the source album (e.g. -mm).' + postfixes['m'])
+    torrent_group.add_argument(
+            '-M', '--no-torrent', action='store_true',
+            help='Ensures no .torrent files are created' + postfixes['M'])
 
-    parser.add_argument('-f', '--formats', action='store', default=Job.Defaults.default_formats,
-                        help='The comma-separated formats to transcode to (can be of 16-48,16-44,alac,320,v0,v1,v2) '
-                             '(default: %(default)s)')
-    parser.add_argument('-c', '--cores', action='store', type=int, default=Job.Defaults.max_threads,
-                        help='The number of cores to transcode on. Any number below 1 means to use the '
-                             'number of CPU cores in the system (default: %(default)s)')
-
-    parser.add_argument('-o', '--torrent-output', action='store', default=Job.Defaults.torrent_output,
-                        help='The directory to store any created .torrent files (default: %(default)s)')
-    parser.add_argument('-O', '--transcode-output', action='store', default=Job.Defaults.transcode_output,
-                        help='The directory to store any transcoded albums in (default: %(default)s)')
+    parser.add_argument(
+            '-f', '--formats', action='store', default=Job.Defaults.default_formats,
+            help='The comma-separated formats to transcode to (can be of 16-48,16-44,alac,320,v0,v1,v2) '
+            '(default: %(default)s)')
+    parser.add_argument(
+            '-c', '--cores', action='store', type=int, default=Job.Defaults.max_threads,
+            help='The number of cores to transcode on. Any number below 1 means to use the '
+            'number of CPU cores in the system (default: %(default)s)')
+    parser.add_argument(
+            '-o', '--torrent-output', action='store', default=Job.Defaults.torrent_output,
+            help='The directory to store any created .torrent files (default: %(default)s)')
+    parser.add_argument(
+            '-O', '--transcode-output', action='store', default=Job.Defaults.transcode_output,
+            help='The directory to store any transcoded albums in (default: %(default)s)')
 
     return parser.parse_args()
 
