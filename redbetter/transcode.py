@@ -31,7 +31,7 @@ from redbetter.utils import copy_contents
 from redbetter.utils import find_torrent_command
 from redbetter.utils import get_tags
 from redbetter.utils import format_command
-from redbetter.utils import remove_prefixes
+from redbetter.utils import adjust_prefixes
 from redbetter.utils import enumerate_contents
 from redbetter.utils import normalize_directory_path
 
@@ -342,7 +342,9 @@ class Job(object):
                 transcoded = '%s [%s]' % (source.rstrip(), transcode_format.upper())
 
             transcoded = transcoded[transcoded.rfind('/') + 1:]
-            transcoded = remove_prefixes(self.snip_prefixes, transcoded)
+            transcoded = adjust_prefixes(transcoded,
+                                         self.prefix,
+                                         self.snip_prefixes)
             transcoded = self.transcode_output + '/' + transcoded
 
             if os.path.exists(transcoded):

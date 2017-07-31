@@ -55,10 +55,15 @@ def copy_contents(src, dst, dirs, files):
         shutil.copy(src + '/' + file, dst + '/' + file)
 
 
-def remove_prefixes(prefixes, name):
-    for prefix in prefixes:
+def adjust_prefixes(name, to_add=None, to_remove=None):
+    for prefix in (to_remove or []):
         if name.startswith(prefix):
-            return name[len(prefix):]
+            name = name[len(prefix):]
+            break
+
+    if to_add:
+        return to_add + name
+
     return name
 
 

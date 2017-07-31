@@ -90,8 +90,8 @@ def parse_args():
             '--prefix',
             action='store',
             default=Defaults.prefix,
-            help='A space-separated list of prefixes to add to transcode '
-            'directories and all .torrent files (empty by default)')
+            help='A prefix to add to transcode directories and all .torrent '
+            'files (empty by default)')
     parser.add_argument(
             '-x',
             '--snip-prefixes',
