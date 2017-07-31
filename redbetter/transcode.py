@@ -61,7 +61,7 @@ class Defaults(object):
     # torrent files created.
     prefix = ''
     # A source to embed in the generated torrent files.
-    source = 'red'
+    source = ''
 
 
 class Job(object):
